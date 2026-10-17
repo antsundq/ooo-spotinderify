@@ -7,7 +7,7 @@ import { createLiveDeck, saveSlider } from '../mixer/live';
 import { POOL_IDS, type SwipeDir } from '../mixer/scoring';
 import type { Swipe } from '../store/db';
 import { createCardElement, escapeHtml, preloadCovers, toggleFlip } from './card';
-import { playAlbum } from './player';
+import { playAlbum, renderNowPlaying, showDevicePicker } from './player';
 import { attachSwipe, type SwipeController } from './swipe';
 
 const ICONS = {
@@ -52,6 +52,7 @@ export async function mountDeckScreen(root: HTMLElement, opts: ScreenOptions): P
       <main class="stack" data-stack>
         <div class="empty" data-empty><div class="spinner"></div><p>Building your deck…</p></div>
       </main>
+      <div class="nowplaying" data-now hidden></div>
       <footer class="actions">
         <button class="round skip" data-act="left" aria-label="Skip">${ICONS.skip}</button>
         <button class="round save" data-act="up" aria-label="Save to library">${ICONS.save}</button>
@@ -73,6 +74,7 @@ export async function mountDeckScreen(root: HTMLElement, opts: ScreenOptions): P
   const undoButton = $<HTMLButtonElement>('[data-undo]');
   const toast = $('[data-toast]');
   const sheet = $<HTMLDialogElement>('[data-sheet]');
+  const nowBar = $('[data-now]');
 
   const entries = new Map<string, CardEntry>();
   const undoStack: UndoEntry[] = [];
@@ -159,7 +161,10 @@ export async function mountDeckScreen(root: HTMLElement, opts: ScreenOptions): P
         (err: unknown) => showToast(`Couldn't save: ${errorText(err)}`),
       );
     } else if (dir === 'right') {
-      void playAlbum(card).then((r) => showToast(r.message));
+      void playAlbum(card, { pickDevice: (devices) => showDevicePicker(root, devices) }).then((r) => {
+        showToast(r.message);
+        if (r.ok && r.device) renderNowPlaying(nowBar, card, r.device);
+      });
     }
   };
 
@@ -223,7 +228,7 @@ export async function mountDeckScreen(root: HTMLElement, opts: ScreenOptions): P
 
   const onKey = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
-    if (sheet.open || target.closest('input')) return;
+    if (sheet.open || document.querySelector('dialog[open]') || target.closest('input')) return;
     // Let Enter/Space activate a focused button or link instead of flipping.
     if ((e.key === ' ' || e.key === 'Enter') && target.closest('button, a')) return;
     const keyDir: Record<string, SwipeDir> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up' };

@@ -366,3 +366,40 @@ export function removeFromLibrary(uris: string[], client: SpotifyClient = spotif
 export function albumIdFromUri(uri: string): string {
   return uri.split(':').pop() ?? uri;
 }
+
+// --- Player ----------------------------------------------------------------------
+
+export interface SpotifyDevice {
+  id: string | null;
+  is_active: boolean;
+  is_private_session: boolean;
+  /** Restricted devices accept no Web API commands. */
+  is_restricted: boolean;
+  name: string;
+  type: string;
+  volume_percent: number | null;
+}
+
+/** `GET /me/player/devices`. Never cached: devices come and go. */
+export async function getDevices(client: SpotifyClient = spotify): Promise<SpotifyDevice[]> {
+  return (await client.get<{ devices: SpotifyDevice[] }>('/me/player/devices')).devices;
+}
+
+/** `PUT /me/player`: move playback to a device without starting it. */
+export function transferPlayback(deviceId: string, client: SpotifyClient = spotify): Promise<void> {
+  return client.put('/me/player', { device_ids: [deviceId], play: false });
+}
+
+/** `PUT /me/player/shuffle?state=…`. */
+export function setShuffle(state: boolean, deviceId: string, client: SpotifyClient = spotify): Promise<void> {
+  return client.put('/me/player/shuffle', undefined, { state, device_id: deviceId });
+}
+
+/** `PUT /me/player/play` with an album context, from track 1. */
+export function playContext(contextUri: string, deviceId: string, client: SpotifyClient = spotify): Promise<void> {
+  return client.put(
+    '/me/player/play',
+    { context_uri: contextUri, offset: { position: 0 }, position_ms: 0 },
+    { device_id: deviceId },
+  );
+}

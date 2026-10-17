@@ -611,3 +611,118 @@ svg .fill {
   text-align: center;
   padding: 8px;
 }
+
+/* --- Playback ---------------------------------------------------------- */
+
+.nowplaying {
+  padding: 0 16px;
+}
+
+.nowplaying[hidden] {
+  display: none;
+}
+
+.np-open {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 400;
+  text-align: left;
+}
+
+.np-open img {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  flex: none;
+}
+
+.np-text {
+  display: grid;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+
+.np-text strong,
+.np-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.np-text span {
+  color: var(--muted);
+}
+
+.sheet h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.device-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.device {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  border-radius: 12px;
+  background: #2a2a2a;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.card-dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  overflow: visible;
+  --card-w: min(calc(100vw - 32px), 400px, calc(100dvh - 220px));
+}
+
+.card-dialog[open] {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+}
+
+.card-dialog::backdrop {
+  background: rgb(0 0 0 / 0.75);
+}
+
+.card.static {
+  position: relative;
+  inset: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+.card-dialog-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.card-dialog-actions .button-link {
+  margin: 0;
+  padding: 12px 20px;
+}
+
+/* Leave room for the mini-bar once something is playing. */
+.screen:has(.nowplaying:not([hidden])) {
+  --card-w: min(calc(100vw - 32px), 440px, calc(100vh - 350px));
+  --card-w: min(calc(100vw - 32px), 440px, calc(100dvh - 350px));
+}
