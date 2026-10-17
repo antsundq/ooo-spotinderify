@@ -1,4 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import type { ArtistWeight, SwipeDir } from '../mixer/scoring';
+import type { CandidateSource } from '../pools/types';
 
 export interface CacheEntry {
   key: string;
@@ -14,10 +16,25 @@ interface SpotinderDB extends DBSchema {
   cache: { key: string; value: CacheEntry };
   /** Album URI → epoch ms it was last heard (from recently-played and right swipes). */
   plays: { key: string; value: number };
+  /** Append-only swipe log. */
+  swipes: { key: number; value: Swipe };
+  /** Artist ID → decaying like/dislike weight. */
+  artists: { key: string; value: ArtistWeight };
+}
+
+export interface Swipe {
+  id?: number;
+  uri: string;
+  name: string;
+  artist: string;
+  artistId: string;
+  dir: SwipeDir;
+  at: number;
+  source: CandidateSource;
 }
 
 const DB_NAME = 'spotinder';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<SpotinderDB>> | undefined;
 
@@ -31,6 +48,10 @@ export function db(): Promise<IDBPDatabase<SpotinderDB>> {
       }
       if (oldVersion < 2) {
         database.createObjectStore('plays');
+      }
+      if (oldVersion < 3) {
+        database.createObjectStore('swipes', { keyPath: 'id', autoIncrement: true });
+        database.createObjectStore('artists');
       }
     },
   });

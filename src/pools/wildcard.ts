@@ -2,7 +2,8 @@
 
 import { lastfm, type LastfmClient } from '../api/lastfm';
 import { spotify, type SpotifyClient } from '../api/spotify';
-import { isFatal, loadLibrary, loadTopArtists } from './library';
+import { isKidsCandidate, loadKidsBlocklist } from './filters';
+import { isFatal, loadLibrary, loadTopArtists, orQuotaError } from './library';
 import { albumKeyOf, normalizeName, resolveAlbum, toCandidate } from './resolve';
 import type { AlbumCandidate } from './types';
 import { mapLimit, shuffle, tryOrSkip, weightedPick, type Rng } from './util';
@@ -67,8 +68,9 @@ export async function wildcardPool({
   client = spotify,
   lfm = lastfm,
 }: WildcardOptions = {}): Promise<AlbumCandidate[]> {
-  const [top, library] = await Promise.all([loadTopArtists(client), loadLibrary(client)]);
-  const perArtist = await mapLimit(top.slice(0, 10), 4, async (a) => ({
+  const [top, library, blocklist] = await Promise.all([loadTopArtists(client), loadLibrary(client), loadKidsBlocklist()]);
+  const tasteArtists = top.filter((a) => !blocklist.has(normalizeName(a.name))).slice(0, 10);
+  const perArtist = await mapLimit(tasteArtists, 4, async (a) => ({
     artist: a.name,
     tags: (await tryOrSkip(() => lfm.artistTopTags(a.name), isFatal)) ?? [],
   }));
@@ -88,9 +90,10 @@ export async function wildcardPool({
       const key = albumKeyOf(album);
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(toCandidate(album, { kind: 'tag', tag }, rng()));
+      const candidate = toCandidate(album, { kind: 'tag', tag }, rng());
+      if (!isKidsCandidate(candidate, blocklist)) out.push(candidate);
     }
     return out;
   });
-  return results.flat().slice(0, count);
+  return orQuotaError(results.flat().slice(0, count), client);
 }

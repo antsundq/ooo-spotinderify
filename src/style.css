@@ -170,3 +170,42 @@ pre {
 .badge {
   color: var(--accent);
 }
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.slider input {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.deck-actions {
+  margin: 8px 0 12px;
+}
+
+.swipe-buttons {
+  display: flex;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.swipe-buttons button {
+  flex: 1;
+  padding: 8px 0;
+}
+
+.pool-tag {
+  display: block;
+  padding: 0 10px 10px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.debug p {
+  margin: 4px 0;
+}

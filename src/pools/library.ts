@@ -29,6 +29,16 @@ export async function loadTopArtists(client: SpotifyClient = spotify): Promise<S
   return [...medium, ...long].filter((a) => !seen.has(a.id) && !!seen.add(a.id));
 }
 
-/** Errors that should abort a whole pool build instead of skipping one item: quota, or a missing/invalid Last.fm key. */
-export const isFatal = (e: unknown) =>
-  e instanceof QuotaExceededError || (e instanceof LastfmError && e.code === 10);
+/**
+ * Errors that should abort a whole pool build instead of skipping one item: a missing/invalid Last.fm key.
+ * Quota errors are skipped per item (they fail fast without a request), so a pool can still serve
+ * whatever is already cached; `orQuotaError` reports the quota only if nothing came out.
+ */
+export const isFatal = (e: unknown) => e instanceof LastfmError && e.code === 10;
+
+/** Throws the quota error if a pool came out empty while Spotify calls were blocked. */
+export function orQuotaError<T>(items: T[], client: SpotifyClient): T[] {
+  const blockedUntil = client.quotaBlockedUntil();
+  if (!items.length && blockedUntil > Date.now()) throw new QuotaExceededError(blockedUntil);
+  return items;
+}

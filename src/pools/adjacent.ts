@@ -2,7 +2,8 @@
 
 import { lastfm, type LastfmClient } from '../api/lastfm';
 import { getArtistAlbums, spotify, type SpotifyClient } from '../api/spotify';
-import { isFatal, loadLibrary, loadTopArtists } from './library';
+import { checkKidsArtist, isKidsCandidate, loadKidsBlocklist } from './filters';
+import { isFatal, loadLibrary, loadTopArtists, orQuotaError } from './library';
 import { dedupeAlbums, isProperAlbum, normalizeName, resolveArtist, toCandidate } from './resolve';
 import type { AlbumCandidate } from './types';
 import { mapLimit, shuffle, tryOrSkip, weightedPick, type Rng } from './util';
@@ -34,16 +35,33 @@ export async function adjacentPool({
   const [top, library] = await Promise.all([loadTopArtists(client), loadLibrary(client)]);
   const topNames = new Set(top.map((a) => normalizeName(a.name)));
 
-  // Similar artists for a random handful of my top artists. Keep the best match per artist.
-  const seedArtists = shuffle(top, rng).slice(0, seeds);
-  const lists = await mapLimit(seedArtists, 4, (seed) =>
-    tryOrSkip(async () => (await lfm.similarArtists(seed.name, 30)).map((s) => ({ ...s, seed: seed.name })), isFatal),
-  );
+  // Similar artists for a random handful of my top artists, skipping kids' music seeds.
+  // Keep the best match per artist.
+  const blocklist = await loadKidsBlocklist();
+  const seedPool = shuffle(top, rng).filter((a) => !blocklist.has(normalizeName(a.name)));
+  const lists: SimilarPick[][] = [];
+  let next = 0;
+  while (lists.length < seeds && next < seedPool.length) {
+    const batch = seedPool.slice(next, next + seeds - lists.length);
+    next += batch.length;
+    const results = await mapLimit(batch, 4, (seed) =>
+      tryOrSkip(async () => {
+        const similarList = await lfm.similarArtists(seed.name, 30);
+        const names = similarList.map((s) => s.name);
+        if (await checkKidsArtist(lfm, seed.name, names)) {
+          for (const n of [seed.name, ...names]) blocklist.add(normalizeName(n));
+          return undefined;
+        }
+        return similarList.map((s) => ({ ...s, seed: seed.name }));
+      }, isFatal),
+    );
+    for (const r of results) if (r) lists.push(r);
+  }
   const similar = new Map<string, SimilarPick>();
   for (const s of lists.flat()) {
     if (!s) continue;
     const key = normalizeName(s.name);
-    if (topNames.has(key)) continue;
+    if (topNames.has(key) || blocklist.has(key)) continue;
     if ((similar.get(key)?.match ?? -1) < s.match) similar.set(key, s);
   }
 
@@ -69,8 +87,10 @@ export async function adjacentPool({
         .map((a) => toCandidate(a, { kind: 'similar', to: pick.seed }, pick.match));
     }, isFatal),
   );
-  return perArtist
+  const result = perArtist
     .flatMap((c) => c ?? [])
+    .filter((c) => !isKidsCandidate(c, blocklist))
     .sort((a, b) => b.score - a.score)
     .slice(0, count);
+  return orQuotaError(result, client);
 }

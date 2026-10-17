@@ -82,6 +82,20 @@ describe('spotify client', () => {
     await expect(client.get('/me')).resolves.toEqual({ ok: 1 });
   });
 
+  it('persists the quota backoff and honours it after a reload', async () => {
+    const quota = { error: { status: 429, message: 'Too many requests', reason: 'QUOTA_EXCEEDED' } };
+    let stored: number | undefined;
+    const quotaStore = { load: async () => stored, save: async (until: number) => void (stored = until) };
+    const first = setup([json(429, quota)], { quotaStore });
+    await expect(first.client.get('/me')).rejects.toBeInstanceOf(QuotaExceededError);
+    expect(stored).toBeGreaterThan(1_000_000);
+
+    // A fresh client (page reload) must not call the API while the stored block lasts.
+    const second = setup([json(200, { ok: 1 })], { quotaStore });
+    await expect(second.client.get('/me')).rejects.toBeInstanceOf(QuotaExceededError);
+    expect(second.fetch).not.toHaveBeenCalled();
+  });
+
   it('refreshes the token once on 401', async () => {
     const { client, getToken } = setup([json(401, { error: { message: 'expired' } }), json(200, { ok: true })]);
     await expect(client.get('/me')).resolves.toEqual({ ok: true });

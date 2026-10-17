@@ -12,7 +12,7 @@ import { idbCache, MAPPING_PREFIX, type ResponseCache } from '../store/db';
 import type { AlbumCandidate, CandidateSource } from './types';
 
 const EDITION_WORDS =
-  "deluxe|expanded|remaster(?:ed)?|anniversary|edition|version|bonus|reissue|mono|stereo|special|collector'?s|legacy|super";
+  "deluxe|expanded|remaster(?:ed)?|anniversary|edition|version|bonus|reissue|re-?release|mono|stereo|special|collector'?s|legacy|super";
 
 /** "(Deluxe Edition)", "[2011 Remaster]" and similar bracketed suffixes. */
 const BRACKET_EDITION = new RegExp(`\\s*[(\\[][^)\\]]*\\b(?:${EDITION_WORDS})\\b[^)\\]]*[)\\]]`, 'gi');
@@ -20,6 +20,10 @@ const BRACKET_EDITION = new RegExp(`\\s*[(\\[][^)\\]]*\\b(?:${EDITION_WORDS})\\b
 const DASH_EDITION = new RegExp(`\\s+[-–—]\\s+[^-–—]*\\b(?:${EDITION_WORDS})\\b.*$`, 'i');
 
 const COMPILATION_NAME = /\b(greatest hits|best of|the very best|the essential|anthology|hits collection)\b/i;
+
+/** Live recordings and remix albums: "(Live)", "Live at …", ": Live à Paris", "In Concert", "Remixes". */
+const LIVE_OR_REMIX =
+  /([(\[]live\b|[-–—:]\s*live\b|\blive (at|in|from|on|à|au|session|recording)|\bin concert\b|\bunplugged\b|\bremix(es|ez|ed)?\b|\bkaraoke\b)/i;
 
 /** Letters that NFKD does not decompose into ASCII. */
 const FOLD: Record<string, string> = { æ: 'ae', œ: 'oe', ø: 'o', ß: 'ss', þ: 'th', ð: 'd', đ: 'd', ł: 'l', ı: 'i' };
@@ -56,9 +60,13 @@ export function isCompilation(album: Pick<SimplifiedAlbum, 'album_type' | 'name'
   return album.album_type === 'compilation' || COMPILATION_NAME.test(album.name);
 }
 
-/** Full-length studio-style albums only: no singles/EPs, no compilations. */
+export function isLiveOrRemix(name: string): boolean {
+  return LIVE_OR_REMIX.test(name);
+}
+
+/** Full-length studio albums only: no singles/EPs, compilations, live or remix albums. */
 export function isProperAlbum(album: Pick<SimplifiedAlbum, 'album_type' | 'name'>): boolean {
-  return album.album_type === 'album' && !isCompilation(album);
+  return album.album_type === 'album' && !isCompilation(album) && !isLiveOrRemix(album.name);
 }
 
 export function albumKey(artist: string, title: string): string {

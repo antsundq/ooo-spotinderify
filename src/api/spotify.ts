@@ -3,7 +3,7 @@
 // Dev-mode quota: https://developer.spotify.com/documentation/web-api/concepts/quota-modes
 
 import { getAccessToken } from '../auth/pkce';
-import { idbCache, type ResponseCache } from '../store/db';
+import { idbCache, kvGet, kvSet, type ResponseCache } from '../store/db';
 
 const API_BASE = 'https://api.spotify.com/v1';
 
@@ -54,6 +54,8 @@ export interface ClientDeps {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   maxRetries?: number;
+  /** Persists the quota backoff so a page reload doesn't start hammering the API again. */
+  quotaStore?: { load(): Promise<number | undefined>; save(until: number): Promise<void> };
 }
 
 interface ErrorBody {
@@ -67,6 +69,7 @@ export function createSpotifyClient(deps: ClientDeps) {
   const maxRetries = deps.maxRetries ?? 3;
 
   let quotaBlockedUntil = 0;
+  let quotaLoaded = !deps.quotaStore;
   const inflight = new Map<string, Promise<unknown>>();
 
   function buildUrl(path: string, query: RequestOptions['query']): string {
@@ -80,6 +83,10 @@ export function createSpotifyClient(deps: ClientDeps) {
   async function send<T>(url: string, opts: RequestOptions): Promise<T> {
     let forcedRefresh = false;
     for (let attempt = 0; ; attempt++) {
+      if (!quotaLoaded) {
+        quotaBlockedUntil = Math.max(quotaBlockedUntil, (await deps.quotaStore!.load()) ?? 0);
+        quotaLoaded = true;
+      }
       if (now() < quotaBlockedUntil) throw new QuotaExceededError(quotaBlockedUntil);
 
       const token = await deps.getToken(false);
@@ -110,6 +117,7 @@ export function createSpotifyClient(deps: ClientDeps) {
       if (res.status === 429) {
         if (body.error?.reason === 'QUOTA_EXCEEDED') {
           quotaBlockedUntil = now() + QUOTA_BACKOFF_MS;
+          await deps.quotaStore?.save(quotaBlockedUntil);
           throw new QuotaExceededError(quotaBlockedUntil);
         }
         // Retry-After is "normally" present; fall back to exponential backoff.
@@ -167,7 +175,13 @@ export function createSpotifyClient(deps: ClientDeps) {
 
 export type SpotifyClient = ReturnType<typeof createSpotifyClient>;
 
-export const spotify = createSpotifyClient({ getToken: getAccessToken, cache: idbCache });
+const QUOTA_KEY = 'spotify.quotaBlockedUntil';
+
+export const spotify = createSpotifyClient({
+  getToken: getAccessToken,
+  cache: idbCache,
+  quotaStore: { load: () => kvGet<number>(QUOTA_KEY), save: (until) => kvSet(QUOTA_KEY, until) },
+});
 
 // --- Endpoints ---------------------------------------------------------------
 
