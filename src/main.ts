@@ -1,0 +1,109 @@
+import { registerSW } from 'virtual:pwa-register';
+import { config, missingConfig } from './config';
+import { expireAccessToken, getTokens, handleCallback, isCallback, login, logout } from './auth/pkce';
+import { getMe, QuotaExceededError } from './api/spotify';
+import { clearCache } from './store/db';
+
+registerSW({ immediate: true });
+
+const app = document.querySelector<HTMLElement>('#app')!;
+const appRoot = import.meta.env.BASE_URL;
+
+function render(html: string): void {
+  app.innerHTML = html;
+}
+
+function escape(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+function on(id: string, handler: () => void | Promise<void>): void {
+  document.getElementById(id)?.addEventListener('click', () => void handler());
+}
+
+function renderError(err: unknown): void {
+  const message = err instanceof QuotaExceededError
+    ? `Spotify quota exceeded. Calls paused until ${new Date(err.blockedUntil).toLocaleTimeString()}.`
+    : err instanceof Error ? err.message : String(err);
+  render(`
+    <section class="panel">
+      <h1>Spotinder</h1>
+      <p class="error">${escape(message)}</p>
+      <button id="retry">Try again</button>
+      <button id="login" class="secondary">Log in again</button>
+    </section>`);
+  on('retry', boot);
+  on('login', login);
+}
+
+function renderLoggedOut(): void {
+  render(`
+    <section class="panel">
+      <h1>Spotinder</h1>
+      <p>Swipe through albums. Right plays the album on Spotify.</p>
+      <button id="login">Log in with Spotify</button>
+    </section>`);
+  on('login', login);
+}
+
+async function renderHome(): Promise<void> {
+  render(`<section class="panel"><p>Loading…</p></section>`);
+  const me = await getMe();
+  const tokens = await getTokens();
+  const expires = tokens ? new Date(tokens.expiresAt).toLocaleTimeString() : '?';
+  render(`
+    <section class="panel">
+      <h1>Spotinder</h1>
+      <p class="hello">Logged in as <strong>${escape(me.display_name ?? me.id)}</strong></p>
+      <p class="muted">Access token valid until ${expires}</p>
+      <button id="logout" class="secondary">Log out</button>
+      <details>
+        <summary>Debug</summary>
+        <button id="expire" class="secondary">Expire token &amp; refetch /me</button>
+      </details>
+    </section>`);
+  on('logout', async () => {
+    await logout();
+    await clearCache();
+    renderLoggedOut();
+  });
+  on('expire', async () => {
+    await expireAccessToken();
+    await clearCache();
+    await renderHome();
+  });
+}
+
+async function boot(): Promise<void> {
+  const missing = missingConfig();
+  if (missing.length) {
+    render(`
+      <section class="panel">
+        <h1>Setup needed</h1>
+        <p>Add these to <code>.env.local</code> and restart the dev server:</p>
+        <pre>${missing.join('\n')}</pre>
+      </section>`);
+    return;
+  }
+
+  try {
+    if (isCallback(window.location)) {
+      const params = new URLSearchParams(window.location.search);
+      // Drop ?code= from the address bar before anything else can fail.
+      window.history.replaceState(null, '', appRoot);
+      await handleCallback(params);
+    }
+    if (!(await getTokens())) return renderLoggedOut();
+    await renderHome();
+  } catch (err) {
+    console.error(err);
+    renderError(err);
+  }
+}
+
+if (window.location.hostname === 'localhost' && config.redirectUri?.includes('127.0.0.1')) {
+  // Spotify rejects localhost redirect URIs, and IndexedDB is per-origin, so always use 127.0.0.1.
+  window.location.replace(window.location.href.replace('//localhost', '//127.0.0.1'));
+} else {
+  void boot();
+}
