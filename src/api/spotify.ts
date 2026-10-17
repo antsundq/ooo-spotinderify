@@ -188,3 +188,120 @@ export interface SpotifyUser {
 export function getMe(client: SpotifyClient = spotify): Promise<SpotifyUser> {
   return client.get<SpotifyUser>('/me', undefined, 60 * 60_000);
 }
+
+export interface SimplifiedArtist {
+  id: string;
+  name: string;
+  uri: string;
+}
+
+export interface SpotifyArtist extends SimplifiedArtist {
+  images: SpotifyImage[];
+}
+
+export interface SimplifiedAlbum {
+  id: string;
+  uri: string;
+  name: string;
+  album_type: 'album' | 'single' | 'compilation';
+  release_date: string;
+  release_date_precision: 'year' | 'month' | 'day';
+  total_tracks: number;
+  images: SpotifyImage[];
+  artists: SimplifiedArtist[];
+}
+
+export interface Paging<T> {
+  items: T[];
+  next: string | null;
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface SavedAlbum {
+  added_at: string;
+  album: SimplifiedAlbum;
+}
+
+export interface PlayHistory {
+  played_at: string;
+  track: { id: string; name: string; album: SimplifiedAlbum };
+  context: { type: string; uri: string } | null;
+}
+
+export type TimeRange = 'short_term' | 'medium_term' | 'long_term';
+
+const HOUR = 60 * 60_000;
+const DAY = 24 * HOUR;
+
+/** Follows `next` links until `maxItems` items are collected or the list ends. */
+export async function paginate<T>(
+  client: SpotifyClient,
+  path: string,
+  query: RequestOptions['query'],
+  cacheTtlMs: number,
+  maxItems = Infinity,
+): Promise<T[]> {
+  const items: T[] = [];
+  let page = await client.get<Paging<T>>(path, query, cacheTtlMs);
+  items.push(...page.items);
+  while (page.next && items.length < maxItems) {
+    page = await client.get<Paging<T>>(page.next, undefined, cacheTtlMs);
+    items.push(...page.items);
+  }
+  return items.slice(0, maxItems);
+}
+
+/** `GET /me/albums`, all pages, cached 24 h. */
+export function getSavedAlbums(client: SpotifyClient = spotify): Promise<SavedAlbum[]> {
+  return paginate<SavedAlbum>(client, '/me/albums', { limit: 50 }, DAY);
+}
+
+/** `GET /me/player/recently-played`. Spotify only exposes the last 50 plays. */
+export async function getRecentlyPlayed(client: SpotifyClient = spotify): Promise<PlayHistory[]> {
+  const page = await client.get<Paging<PlayHistory>>('/me/player/recently-played', { limit: 50 }, 10 * 60_000);
+  return page.items;
+}
+
+/** `GET /me/top/artists`, cached 24 h. */
+export async function getTopArtists(timeRange: TimeRange, client: SpotifyClient = spotify): Promise<SpotifyArtist[]> {
+  const page = await client.get<Paging<SpotifyArtist>>('/me/top/artists', { time_range: timeRange, limit: 50 }, DAY);
+  return page.items;
+}
+
+/** Strips characters that Spotify's query parser treats specially. */
+function searchTerm(s: string): string {
+  return s.replace(/["':]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** `GET /search?type=artist`. At most 10 results per type since Feb 2026. */
+export async function searchArtists(name: string, client: SpotifyClient = spotify): Promise<SpotifyArtist[]> {
+  const res = await client.get<{ artists: Paging<SpotifyArtist> }>(
+    '/search',
+    { q: `artist:${searchTerm(name)}`, type: 'artist', limit: 10 },
+    7 * DAY,
+  );
+  return res.artists.items;
+}
+
+/** `GET /search?type=album` for one artist + title. */
+export async function searchAlbums(artist: string, title: string, client: SpotifyClient = spotify): Promise<SimplifiedAlbum[]> {
+  const res = await client.get<{ albums: Paging<SimplifiedAlbum> }>(
+    '/search',
+    { q: `album:${searchTerm(title)} artist:${searchTerm(artist)}`, type: 'album', limit: 10 },
+    7 * DAY,
+  );
+  return res.albums.items;
+}
+
+/** `GET /artists/{id}/albums?include_groups=album`. Pages are at most 10 since Feb 2026. */
+export function getArtistAlbums(artistId: string, maxItems = 30, client: SpotifyClient = spotify): Promise<SimplifiedAlbum[]> {
+  return paginate<SimplifiedAlbum>(
+    client,
+    `/artists/${encodeURIComponent(artistId)}/albums`,
+    { include_groups: 'album', limit: 10 },
+    7 * DAY,
+    maxItems,
+  );
+}

@@ -3,6 +3,7 @@ import { config, missingConfig } from './config';
 import { expireAccessToken, getTokens, handleCallback, isCallback, login, logout } from './auth/pkce';
 import { getMe, QuotaExceededError } from './api/spotify';
 import { clearCache } from './store/db';
+import { renderDebug } from './ui/debug';
 
 registerSW({ immediate: true });
 
@@ -59,6 +60,7 @@ async function renderHome(): Promise<void> {
       <button id="logout" class="secondary">Log out</button>
       <details>
         <summary>Debug</summary>
+        <a class="button-link" href="#/debug">Show candidate pools</a>
         <button id="expire" class="secondary">Expire token &amp; refetch /me</button>
       </details>
     </section>`);
@@ -94,6 +96,7 @@ async function boot(): Promise<void> {
       await handleCallback(params);
     }
     if (!(await getTokens())) return renderLoggedOut();
+    if (window.location.hash === '#/debug') return renderDebug(app);
     await renderHome();
   } catch (err) {
     console.error(err);
@@ -105,5 +108,6 @@ if (window.location.hostname === 'localhost' && config.redirectUri?.includes('12
   // Spotify rejects localhost redirect URIs, and IndexedDB is per-origin, so always use 127.0.0.1.
   window.location.replace(window.location.href.replace('//localhost', '//127.0.0.1'));
 } else {
+  window.addEventListener('hashchange', () => void boot());
   void boot();
 }
