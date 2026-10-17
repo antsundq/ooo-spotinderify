@@ -33,9 +33,8 @@ export async function loadSwipeState(): Promise<SwipeState> {
   return state;
 }
 
-/** Persists a swipe: appends to the log, updates the artist weight and, for right swipes, the play history. */
-export async function recordSwipe(candidate: AlbumCandidate, dir: SwipeDir, now = Date.now()): Promise<Swipe> {
-  const swipe: Swipe = {
+export function makeSwipe(candidate: AlbumCandidate, dir: SwipeDir, now = Date.now()): Swipe {
+  return {
     uri: candidate.uri,
     name: candidate.name,
     artist: candidate.artist,
@@ -44,13 +43,21 @@ export async function recordSwipe(candidate: AlbumCandidate, dir: SwipeDir, now 
     at: now,
     source: candidate.source,
   };
+}
+
+/**
+ * Persists a swipe: appends to the log, updates the artist weight and, for right swipes, the play history.
+ * Returns the log ID, which `undoSwipe` takes.
+ */
+export async function recordSwipe(swipe: Swipe): Promise<number> {
   const tx = (await db()).transaction(['swipes', 'artists', 'plays'], 'readwrite');
-  swipe.id = await tx.objectStore('swipes').add(swipe);
+  const { id: _ignored, ...entry } = swipe;
+  const id = await tx.objectStore('swipes').add(entry);
   const artists = tx.objectStore('artists');
-  await artists.put(addToWeight(await artists.get(swipe.artistId), SWIPE_DELTA[dir], now), swipe.artistId);
-  if (dir === 'right') await tx.objectStore('plays').put(now, swipe.uri);
+  await artists.put(addToWeight(await artists.get(swipe.artistId), SWIPE_DELTA[swipe.dir], swipe.at), swipe.artistId);
+  if (swipe.dir === 'right') await tx.objectStore('plays').put(swipe.at, swipe.uri);
   await tx.done;
-  return swipe;
+  return id;
 }
 
 /** Removes a swipe from the log and takes its contribution back out of the artist weight. */

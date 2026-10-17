@@ -1,9 +1,10 @@
 import { registerSW } from 'virtual:pwa-register';
 import { config, missingConfig } from './config';
-import { expireAccessToken, getTokens, handleCallback, isCallback, login, logout } from './auth/pkce';
+import { getTokens, handleCallback, isCallback, login, logout } from './auth/pkce';
 import { getMe, QuotaExceededError } from './api/spotify';
 import { clearCache } from './store/db';
 import { renderDebug } from './ui/debug';
+import { mountDeckScreen } from './ui/screen';
 
 registerSW({ immediate: true });
 
@@ -47,32 +48,19 @@ function renderLoggedOut(): void {
   on('login', login);
 }
 
+let unmountScreen: (() => void) | undefined;
+
 async function renderHome(): Promise<void> {
   render(`<section class="panel"><p>Loading…</p></section>`);
   const me = await getMe();
-  const tokens = await getTokens();
-  const expires = tokens ? new Date(tokens.expiresAt).toLocaleTimeString() : '?';
-  render(`
-    <section class="panel">
-      <h1>Spotinder</h1>
-      <p class="hello">Logged in as <strong>${escape(me.display_name ?? me.id)}</strong></p>
-      <p class="muted">Access token valid until ${expires}</p>
-      <button id="logout" class="secondary">Log out</button>
-      <details>
-        <summary>Debug</summary>
-        <a class="button-link" href="#/debug">Show candidate pools</a>
-        <button id="expire" class="secondary">Expire token &amp; refetch /me</button>
-      </details>
-    </section>`);
-  on('logout', async () => {
-    await logout();
-    await clearCache();
-    renderLoggedOut();
-  });
-  on('expire', async () => {
-    await expireAccessToken();
-    await clearCache();
-    await renderHome();
+  unmountScreen = await mountDeckScreen(app, {
+    displayName: me.display_name ?? me.id,
+    onLogout: async () => {
+      unmountScreen?.();
+      await logout();
+      await clearCache();
+      renderLoggedOut();
+    },
   });
 }
 
@@ -95,6 +83,8 @@ async function boot(): Promise<void> {
       window.history.replaceState(null, '', appRoot);
       await handleCallback(params);
     }
+    unmountScreen?.();
+    unmountScreen = undefined;
     if (!(await getTokens())) return renderLoggedOut();
     if (window.location.hash === '#/debug') return renderDebug(app);
     await renderHome();

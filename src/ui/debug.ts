@@ -1,8 +1,9 @@
 // Debug page: the live deck with the discovery slider, plus on-demand raw pool listings.
 
 import { QuotaExceededError } from '../api/spotify';
+import { expireAccessToken, getAccessToken, getTokens } from '../auth/pkce';
 import type { Deck, DeckCard } from '../mixer/deck';
-import { loadSwipeState, recordSwipe, undoSwipe } from '../mixer/history';
+import { loadSwipeState, makeSwipe, recordSwipe, undoSwipe } from '../mixer/history';
 import { createLiveDeck, saveSlider } from '../mixer/live';
 import { poolWeights, POOL_IDS, type PoolId, type SwipeDir } from '../mixer/scoring';
 import { adjacentPool } from '../pools/adjacent';
@@ -43,6 +44,11 @@ function tile(c: AlbumCandidate, extra = ''): string {
     </li>`;
 }
 
+async function showToken(el: HTMLElement): Promise<void> {
+  const tokens = await getTokens();
+  el.textContent = tokens ? `Access token valid until ${new Date(tokens.expiresAt).toLocaleTimeString()}` : 'Not logged in';
+}
+
 function percent(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
@@ -54,6 +60,8 @@ export function renderDebug(root: HTMLElement): void {
         <a href="#/">← Back</a>
         <h1>Debug</h1>
       </header>
+      <p class="muted" data-token></p>
+      <button class="secondary" data-expire>Expire access token &amp; refresh</button>
 
       <section class="pool" id="deck">
         <h2>Deck <span class="muted" data-status>loading…</span></h2>
@@ -78,6 +86,12 @@ export function renderDebug(root: HTMLElement): void {
     </section>`;
 
   void mountDeck(root.querySelector<HTMLElement>('#deck')!);
+  void showToken(root.querySelector<HTMLElement>('[data-token]')!);
+  root.querySelector('[data-expire]')!.addEventListener('click', async () => {
+    await expireAccessToken();
+    await getAccessToken();
+    await showToken(root.querySelector<HTMLElement>('[data-token]')!);
+  });
 
   root.querySelector<HTMLButtonElement>('[data-raw]')!.addEventListener('click', (e) => {
     (e.currentTarget as HTMLButtonElement).remove();
@@ -145,7 +159,8 @@ async function mountDeck(section: HTMLElement): Promise<void> {
     const dir = (e.target as HTMLElement).closest<HTMLElement>('[data-swipe]')?.dataset.swipe as SwipeDir | undefined;
     const card = deck.cards[0];
     if (!dir || !card) return;
-    const swipe = await recordSwipe(card, dir);
+    const swipe = makeSwipe(card, dir);
+    swipe.id = await recordSwipe(swipe);
     undoStack.push({ swipe, card });
     deck.swiped(swipe);
   });

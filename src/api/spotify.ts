@@ -319,3 +319,50 @@ export function getArtistAlbums(artistId: string, maxItems = 30, client: Spotify
     maxItems,
   );
 }
+
+export interface SimplifiedTrack {
+  id: string;
+  name: string;
+  duration_ms: number;
+  track_number: number;
+  disc_number: number;
+  artists: SimplifiedArtist[];
+}
+
+export interface FullAlbum extends SimplifiedAlbum {
+  tracks: Paging<SimplifiedTrack>;
+}
+
+export interface AlbumDetails {
+  album: FullAlbum;
+  /** All tracks, following pagination past the first embedded page. */
+  tracks: SimplifiedTrack[];
+  totalMs: number;
+}
+
+/** `GET /albums/{id}` plus any further track pages, cached 7 days. */
+export async function getAlbumDetails(albumId: string, client: SpotifyClient = spotify): Promise<AlbumDetails> {
+  const album = await client.get<FullAlbum>(`/albums/${encodeURIComponent(albumId)}`, undefined, 7 * DAY);
+  const tracks = [...album.tracks.items];
+  let next = album.tracks.next;
+  while (next) {
+    const page = await client.get<Paging<SimplifiedTrack>>(next, undefined, 7 * DAY);
+    tracks.push(...page.items);
+    next = page.next;
+  }
+  return { album, tracks, totalMs: tracks.reduce((sum, t) => sum + t.duration_ms, 0) };
+}
+
+/** `PUT /me/library?uris=…` (replaced `PUT /me/albums` in Feb 2026). Max 40 URIs. */
+export function saveToLibrary(uris: string[], client: SpotifyClient = spotify): Promise<void> {
+  return client.put('/me/library', undefined, { uris: uris.join(',') });
+}
+
+/** `DELETE /me/library?uris=…`. Max 40 URIs. */
+export function removeFromLibrary(uris: string[], client: SpotifyClient = spotify): Promise<void> {
+  return client.del('/me/library', undefined, { uris: uris.join(',') });
+}
+
+export function albumIdFromUri(uri: string): string {
+  return uri.split(':').pop() ?? uri;
+}
