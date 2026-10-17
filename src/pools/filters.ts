@@ -64,3 +64,43 @@ export async function checkKidsArtist(lfm: LastfmClient, name: string, similarNa
   if (kids) await addToKidsBlocklist([name, ...similar]);
   return kids;
 }
+
+// --- User exclusions (settings) -------------------------------------------------
+
+export interface Exclusions {
+  artists: string[];
+  genres: string[];
+}
+
+const EXCLUSIONS_KEY = 'settings.exclusions';
+
+export async function loadExclusions(): Promise<Exclusions> {
+  return (await kvGet<Exclusions>(EXCLUSIONS_KEY)) ?? { artists: [], genres: [] };
+}
+
+export async function saveExclusions(ex: Exclusions): Promise<void> {
+  const clean = (list: string[]) => [...new Set(list.map((s) => s.trim()).filter(Boolean))];
+  await kvSet(EXCLUSIONS_KEY, { artists: clean(ex.artists), genres: clean(ex.genres) });
+}
+
+export function isExcludedArtist(artist: string, ex: Exclusions): boolean {
+  const name = normalizeName(artist);
+  return ex.artists.some((a) => normalizeName(a) === name);
+}
+
+/** True if a tag names an excluded genre, word-wise: excluding "metal" also excludes "death metal". */
+export function isExcludedTag(tag: string, ex: Exclusions): boolean {
+  const words = ` ${normalizeName(tag)} `;
+  return ex.genres.some((g) => words.includes(` ${normalizeName(g)} `));
+}
+
+/** True if any of an artist's top Last.fm tags is an excluded genre. */
+export function hasExcludedGenre(tags: { name: string }[], ex: Exclusions): boolean {
+  return tags.slice(0, 5).some((t) => isExcludedTag(t.name, ex));
+}
+
+/** Checks an artist's genres via Last.fm (cached). Skips the lookup when no genres are excluded. */
+export async function artistHasExcludedGenre(lfm: LastfmClient, artist: string, ex: Exclusions): Promise<boolean> {
+  if (!ex.genres.length) return false;
+  return hasExcludedGenre(await lfm.artistTopTags(artist), ex);
+}

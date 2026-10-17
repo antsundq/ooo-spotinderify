@@ -2,7 +2,7 @@
 
 import { getRecentlyPlayed, getSavedAlbums, spotify, type SavedAlbum, type SpotifyClient } from '../api/spotify';
 import { getLastPlayed, recordPlays } from '../store/db';
-import { isKidsCandidate, loadKidsBlocklist } from './filters';
+import { isExcludedArtist, isKidsCandidate, loadExclusions, loadKidsBlocklist } from './filters';
 import { dedupeAlbums, toCandidate } from './resolve';
 import type { AlbumCandidate } from './types';
 
@@ -26,6 +26,8 @@ export async function favoritesPool({ client = spotify, now = Date.now() }: { cl
   const [saved, recent] = await Promise.all([getSavedAlbums(client), getRecentlyPlayed(client)]);
   // Spotify only remembers the last 50 plays, so keep our own running history.
   await recordPlays(recent.map((p) => [p.track.album.uri, Date.parse(p.played_at)]));
-  const blocklist = await loadKidsBlocklist();
-  return rankFavorites(saved, await getLastPlayed(), now).filter((c) => !isKidsCandidate(c, blocklist));
+  const [blocklist, exclusions] = await Promise.all([loadKidsBlocklist(), loadExclusions()]);
+  return rankFavorites(saved, await getLastPlayed(), now).filter(
+    (c) => !isKidsCandidate(c, blocklist) && !isExcludedArtist(c.artist, exclusions),
+  );
 }

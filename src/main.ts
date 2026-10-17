@@ -23,7 +23,24 @@ function on(id: string, handler: () => void | Promise<void>): void {
   document.getElementById(id)?.addEventListener('click', () => void handler());
 }
 
+/** fetch() rejects with a TypeError when the network is unreachable. */
+function isOffline(err: unknown): boolean {
+  return !navigator.onLine || err instanceof TypeError;
+}
+
+function renderOffline(): void {
+  render(`
+    <section class="panel">
+      <h1>You're offline</h1>
+      <p>Spotinder needs the network to talk to Spotify. It will continue as soon as you're back online.</p>
+      <button id="retry">Try again</button>
+    </section>`);
+  on('retry', boot);
+  window.addEventListener('online', () => void boot(), { once: true });
+}
+
 function renderError(err: unknown): void {
+  if (isOffline(err)) return renderOffline();
   const message = err instanceof QuotaExceededError
     ? `Spotify quota exceeded. Calls paused until ${new Date(err.blockedUntil).toLocaleTimeString()}.`
     : err instanceof Error ? err.message : String(err);

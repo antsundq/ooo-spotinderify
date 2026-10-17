@@ -187,6 +187,18 @@ describe('Deck', () => {
     expect(deck.cards).toHaveLength(DECK_TARGET);
   });
 
+  it('reconsiders queued cards when the learned state is replaced', async () => {
+    const adjacent = candidates('adjacent', 20, () => 'same');
+    const { deck } = makeDeck({ slider: 100, pools: { adjacent } });
+    await deck.start();
+    expect(deck.cards.some((c) => c.artistId === 'same')).toBe(true);
+    const state = emptySwipeState();
+    state.artistWeights.set('same', addToWeight(undefined, -3, NOW));
+    deck.setState(state);
+    expect(deck.cards.some((c) => c.artistId === 'same')).toBe(false);
+    expect(deck.cards).toHaveLength(DECK_TARGET);
+  });
+
   it('keeps working when a pool fails', async () => {
     const builders = makeDeck({}).builders;
     builders.wildcard.mockRejectedValue(new Error('Last.fm down'));

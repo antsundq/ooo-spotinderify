@@ -123,6 +123,15 @@ export class Deck {
     this.deps.onChange?.();
   }
 
+  /** Replaces the learned state (e.g. after resetting weights) and re-checks queued cards against it. */
+  setState(state: SwipeState): void {
+    this.state = state;
+    for (const c of this.queue.filter((c) => !this.isEligible(c, false))) this.release(c);
+    this.queue = this.queue.filter((c) => this.isEligible(c, false));
+    this.fill();
+    this.deps.onChange?.();
+  }
+
   poolStatus(): Record<PoolId, PoolStatus> {
     const out = {} as Record<PoolId, PoolStatus>;
     for (const id of POOL_IDS) {

@@ -8,6 +8,7 @@ import { POOL_IDS, type SwipeDir } from '../mixer/scoring';
 import type { Swipe } from '../store/db';
 import { createCardElement, escapeHtml, preloadCovers, toggleFlip } from './card';
 import { playAlbum, renderNowPlaying, showDevicePicker } from './player';
+import { showSettings } from './settings';
 import { attachSwipe, type SwipeController } from './swipe';
 
 const ICONS = {
@@ -61,6 +62,7 @@ export async function mountDeckScreen(root: HTMLElement, opts: ScreenOptions): P
       <div class="toast" data-toast role="status" aria-live="polite"></div>
       <dialog class="sheet" data-sheet>
         <p>Logged in as <strong>${escapeHtml(opts.displayName)}</strong></p>
+        <button class="secondary" data-settings>Settings</button>
         <a class="sheet-link" href="#/debug">Debug</a>
         <button class="secondary" data-logout>Log out</button>
         <button data-close>Close</button>
@@ -221,6 +223,15 @@ export async function mountDeckScreen(root: HTMLElement, opts: ScreenOptions): P
   $('[data-close]').addEventListener('click', () => sheet.close());
   sheet.addEventListener('click', (e) => e.target === sheet && sheet.close());
   sheet.querySelector('a')!.addEventListener('click', () => sheet.close());
+  $('[data-settings]').addEventListener('click', () => {
+    sheet.close();
+    void showSettings(root, {
+      deck,
+      onSlider: (value) => (slider.value = String(value)),
+      toast: showToast,
+      reload: () => setTimeout(() => window.location.reload(), 600),
+    });
+  });
   $('[data-logout]').addEventListener('click', () => {
     sheet.close();
     opts.onLogout();

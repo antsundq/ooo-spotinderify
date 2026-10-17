@@ -2,7 +2,14 @@
 
 import { lastfm, type LastfmClient } from '../api/lastfm';
 import { getArtistAlbums, spotify, type SpotifyClient } from '../api/spotify';
-import { checkKidsArtist, isKidsCandidate, loadKidsBlocklist } from './filters';
+import {
+  artistHasExcludedGenre,
+  checkKidsArtist,
+  isExcludedArtist,
+  isKidsCandidate,
+  loadExclusions,
+  loadKidsBlocklist,
+} from './filters';
 import { isFatal, loadLibrary, loadTopArtists, orQuotaError } from './library';
 import { dedupeAlbums, isProperAlbum, normalizeName, resolveArtist, toCandidate } from './resolve';
 import type { AlbumCandidate } from './types';
@@ -37,7 +44,7 @@ export async function adjacentPool({
 
   // Similar artists for a random handful of my top artists, skipping kids' music seeds.
   // Keep the best match per artist.
-  const blocklist = await loadKidsBlocklist();
+  const [blocklist, exclusions] = await Promise.all([loadKidsBlocklist(), loadExclusions()]);
   const seedPool = shuffle(top, rng).filter((a) => !blocklist.has(normalizeName(a.name)));
   const lists: SimilarPick[][] = [];
   let next = 0;
@@ -61,7 +68,7 @@ export async function adjacentPool({
   for (const s of lists.flat()) {
     if (!s) continue;
     const key = normalizeName(s.name);
-    if (topNames.has(key) || blocklist.has(key)) continue;
+    if (topNames.has(key) || blocklist.has(key) || isExcludedArtist(s.name, exclusions)) continue;
     if ((similar.get(key)?.match ?? -1) < s.match) similar.set(key, s);
   }
 
@@ -77,6 +84,8 @@ export async function adjacentPool({
 
   const perArtist = await mapLimit(picks, 3, (pick) =>
     tryOrSkip(async () => {
+      // Genre check first: it only costs a (cached) Last.fm call, not Spotify quota.
+      if (await artistHasExcludedGenre(lfm, pick.name, exclusions)) return [];
       const artist = await resolveArtist(pick.name, client);
       if (!artist) return [];
       const albums = dedupeAlbums((await getArtistAlbums(artist.id, 20, client)).filter(isProperAlbum)).filter(

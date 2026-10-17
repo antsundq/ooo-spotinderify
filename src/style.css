@@ -726,3 +726,60 @@ svg .fill {
   --card-w: min(calc(100vw - 32px), 440px, calc(100vh - 350px));
   --card-w: min(calc(100vw - 32px), 440px, calc(100dvh - 350px));
 }
+
+/* --- Settings ---------------------------------------------------------- */
+
+.settings {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+
+.settings section {
+  display: grid;
+  gap: 8px;
+}
+
+.settings h3 {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.presets button {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+.presets button.selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.settings label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.settings textarea {
+  font: inherit;
+  font-size: 0.9rem;
+  background: #111;
+  color: var(--text);
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.small {
+  font-size: 0.78rem;
+}

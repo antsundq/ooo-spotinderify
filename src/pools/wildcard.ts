@@ -2,7 +2,15 @@
 
 import { lastfm, type LastfmClient } from '../api/lastfm';
 import { spotify, type SpotifyClient } from '../api/spotify';
-import { isKidsCandidate, loadKidsBlocklist } from './filters';
+import {
+  artistHasExcludedGenre,
+  isExcludedArtist,
+  isExcludedTag,
+  isKidsCandidate,
+  loadExclusions,
+  loadKidsBlocklist,
+  type Exclusions,
+} from './filters';
 import { isFatal, loadLibrary, loadTopArtists, orQuotaError } from './library';
 import { albumKeyOf, normalizeName, resolveAlbum, toCandidate } from './resolve';
 import type { AlbumCandidate } from './types';
@@ -38,10 +46,16 @@ export function aggregateTags(perArtist: { artist: string; tags: { name: string;
 }
 
 /** Mostly weighted picks from my own tags; with probability `exploreChance`, a tag I've never touched. */
-export function pickTags(mine: TagWeight[], n: number, exploreChance: number, rng: Rng): string[] {
-  const mineTop = mine.slice(0, 15);
+export function pickTags(
+  mine: TagWeight[],
+  n: number,
+  exploreChance: number,
+  rng: Rng,
+  exclusions: Exclusions = { artists: [], genres: [] },
+): string[] {
+  const mineTop = mine.filter((t) => !isExcludedTag(t.tag, exclusions)).slice(0, 15);
   const myTagSet = new Set(mine.map((t) => t.tag));
-  const untouched = EXPLORE_TAGS.filter((t) => !myTagSet.has(t));
+  const untouched = EXPLORE_TAGS.filter((t) => !myTagSet.has(t) && !isExcludedTag(t, exclusions));
   const picked = new Set<string>();
   for (let i = 0; picked.size < n && i < n * 5; i++) {
     const explore = !mineTop.length || rng() < exploreChance;
@@ -68,13 +82,18 @@ export async function wildcardPool({
   client = spotify,
   lfm = lastfm,
 }: WildcardOptions = {}): Promise<AlbumCandidate[]> {
-  const [top, library, blocklist] = await Promise.all([loadTopArtists(client), loadLibrary(client), loadKidsBlocklist()]);
+  const [top, library, blocklist, exclusions] = await Promise.all([
+    loadTopArtists(client),
+    loadLibrary(client),
+    loadKidsBlocklist(),
+    loadExclusions(),
+  ]);
   const tasteArtists = top.filter((a) => !blocklist.has(normalizeName(a.name))).slice(0, 10);
   const perArtist = await mapLimit(tasteArtists, 4, async (a) => ({
     artist: a.name,
     tags: (await tryOrSkip(() => lfm.artistTopTags(a.name), isFatal)) ?? [],
   }));
-  const chosen = pickTags(aggregateTags(perArtist), tags, exploreChance, rng);
+  const chosen = pickTags(aggregateTags(perArtist), tags, exploreChance, rng, exclusions);
 
   const perTag = Math.ceil(count / Math.max(1, chosen.length));
   const seen = new Set<string>();
@@ -85,6 +104,8 @@ export async function wildcardPool({
     // Each attempt can cost a Spotify search, so cap attempts at twice the target.
     for (const lf of albums.slice(0, perTag * 2)) {
       if (out.length >= perTag) break;
+      if (isExcludedArtist(lf.artist, exclusions)) continue;
+      if (await tryOrSkip(() => artistHasExcludedGenre(lfm, lf.artist, exclusions), isFatal)) continue;
       const album = await tryOrSkip(() => resolveAlbum(lf.artist, lf.name, client), isFatal);
       if (!album || library.has(album)) continue;
       const key = albumKeyOf(album);

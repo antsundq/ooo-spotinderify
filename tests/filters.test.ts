@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { isKidsCandidate, isKidsCluster, looksLikeKidsText } from '../src/pools/filters';
+import {
+  hasExcludedGenre,
+  isExcludedArtist,
+  isExcludedTag,
+  isKidsCandidate,
+  isKidsCluster,
+  looksLikeKidsText,
+} from '../src/pools/filters';
 import { isLiveOrRemix, isProperAlbum } from '../src/pools/resolve';
+import { EXPLORE_TAGS, pickTags } from '../src/pools/wildcard';
 
 describe('children\'s music', () => {
   // Real Last.fm data for "Arne Alligator & Djungeltrumman": no tags, and kids-y similar artists.
@@ -60,5 +68,41 @@ describe('live and remix albums', () => {
 
   it.each(['Live Through This', 'Alive', 'Evil Urges', 'Deliverance', 'Olive', 'Lively Up Yourself'])('keeps %s', (name) => {
     expect(isLiveOrRemix(name)).toBe(false);
+  });
+});
+
+describe('user exclusions', () => {
+  const ex = { artists: ['The Beatles', 'Björk'], genres: ['metal', 'hip-hop'] };
+
+  it('matches artists by normalized name', () => {
+    expect(isExcludedArtist('Beatles', ex)).toBe(true);
+    expect(isExcludedArtist('bjork', ex)).toBe(true);
+    expect(isExcludedArtist('Beat Happening', ex)).toBe(false);
+  });
+
+  it('matches genres word-wise', () => {
+    expect(isExcludedTag('Death Metal', ex)).toBe(true);
+    expect(isExcludedTag('Hip Hop', ex)).toBe(true);
+    expect(isExcludedTag('Metalcore', ex)).toBe(false);
+    expect(isExcludedTag('indie', ex)).toBe(false);
+  });
+
+  it('checks an artist by its top tags', () => {
+    expect(hasExcludedGenre([{ name: 'rock' }, { name: 'heavy metal' }], ex)).toBe(true);
+    expect(hasExcludedGenre([{ name: 'folk' }], ex)).toBe(false);
+  });
+
+  it('keeps excluded genres out of wildcard tag picks', () => {
+    const mine = [
+      { tag: 'heavy metal', weight: 100 },
+      { tag: 'folk', weight: 10 },
+    ];
+    for (let i = 0; i < 20; i++) {
+      expect(pickTags(mine, 3, 0.5, Math.random, ex)).not.toContain('heavy metal');
+    }
+    const explored = pickTags([], 10, 1, Math.random, ex);
+    expect(explored).not.toContain('metal');
+    expect(explored).not.toContain('hip-hop');
+    expect(EXPLORE_TAGS).toContain('metal');
   });
 });
