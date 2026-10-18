@@ -46,7 +46,7 @@ export async function createLiveDeck(onChange: () => void): Promise<Deck> {
     builders: {
       // Favorites come from cached library data and must see fresh play history, so no snapshot.
       favorites: () => favoritesPool(),
-      adjacent: snapshotted('adjacent', () => adjacentPool({ count: 30 })),
+      adjacent: snapshotted('adjacent', () => adjacentPool({ count: 20 })),
       wildcard: snapshotted('wildcard', () => wildcardPool({ count: 20 })),
     },
     state,

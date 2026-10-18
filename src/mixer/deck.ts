@@ -38,6 +38,8 @@ interface PoolState {
   items: AlbumCandidate[];
   building?: Promise<void>;
   builtAt: number;
+  /** Set once the first build finished (or failed). */
+  loaded?: boolean;
   error?: string;
 }
 
@@ -83,20 +85,28 @@ export class Deck {
     return this.sliderValue;
   }
 
-  /** Builds every pool in parallel. Cards appear as soon as the first pool is ready. */
-  start(): Promise<void> {
-    return Promise.all(POOL_IDS.map((id) => this.rebuild(id))).then(() => undefined);
+  /**
+   * Builds the pools one after another, favorites first (cheapest, mostly cached), so a cold start
+   * doesn't fire every discovery request at once. Cards appear as soon as the first pool is ready.
+   */
+  async start(): Promise<void> {
+    for (const id of POOL_IDS) await this.rebuild(id);
   }
 
   /** Changes the mix. Keeps the card on top so it doesn't vanish under the user's finger, redraws the rest. */
   setSlider(value: number): void {
     this.sliderValue = value;
-    const [top, ...rest] = this.queue;
+    this.redraw(1);
+    this.deps.onChange?.();
+  }
+
+  /** Keeps the first `keep` cards, puts the rest back in their pools and draws again with current weights. */
+  private redraw(keep: number): void {
+    const rest = this.queue.slice(keep);
     // Return in reverse so each pool keeps its original order at the front.
     for (const c of rest.reverse()) this.returnToPool(c);
-    this.queue = top ? [top] : [];
+    this.queue = this.queue.slice(0, keep);
     this.fill();
-    this.deps.onChange?.();
   }
 
   /** Call after a swipe has been recorded: removes the card, updates learned state, tops up. */
@@ -181,7 +191,12 @@ export class Deck {
       })
       .finally(() => {
         pool.building = undefined;
-        this.fill();
+        const firstLoad = !pool.loaded;
+        pool.loaded = true;
+        // Until a pool's first build lands, other pools fill its share. Re-mix once it arrives,
+        // keeping the two visible cards (top and the one peeking behind it) in place.
+        if (firstLoad) this.redraw(2);
+        else this.fill();
         this.deps.onChange?.();
       });
     this.deps.onChange?.();
@@ -193,6 +208,8 @@ export class Deck {
     for (const id of POOL_IDS) {
       const pool = this.pools.get(id)!;
       const eligible = pool.items.filter((c) => this.isEligible(c, true)).length;
+      // First builds are start()'s job (one pool at a time); this only tops up pools that ran low.
+      if (!pool.loaded) continue;
       if (eligible < POOL_LOW && !pool.building && now - pool.builtAt > REBUILD_COOLDOWN_MS) void this.rebuild(id);
     }
   }

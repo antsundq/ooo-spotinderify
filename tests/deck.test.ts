@@ -199,6 +199,24 @@ describe('Deck', () => {
     expect(deck.cards).toHaveLength(DECK_TARGET);
   });
 
+  it('re-mixes when slower discovery pools arrive after favorites', async () => {
+    const builders = makeDeck({}).builders;
+    let releaseAdjacent!: () => void;
+    builders.adjacent.mockImplementation(
+      () => new Promise((resolve) => (releaseAdjacent = () => resolve(candidates('adjacent', 40)))),
+    );
+    const deck = new Deck({ builders, state: emptySwipeState(), slider: 100, rng: mulberry32(5), now: () => NOW });
+    const started = deck.start();
+    await vi.waitFor(() => expect(deck.cards).toHaveLength(DECK_TARGET));
+    // Only favorites so far, so they fill in.
+    expect(countByPool(deck.cards).favorites).toBe(DECK_TARGET);
+    const visible = deck.cards.slice(0, 2);
+    releaseAdjacent();
+    await started;
+    expect(deck.cards.slice(0, 2)).toEqual(visible);
+    expect(countByPool(deck.cards.slice(2)).favorites).toBeLessThanOrEqual(4);
+  });
+
   it('keeps working when a pool fails', async () => {
     const builders = makeDeck({}).builders;
     builders.wildcard.mockRejectedValue(new Error('Last.fm down'));

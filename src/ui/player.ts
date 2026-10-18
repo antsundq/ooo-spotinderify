@@ -4,6 +4,7 @@ import {
   albumIdFromUri,
   getDevices,
   playContext,
+  QuotaExceededError,
   setShuffle,
   spotify,
   SpotifyApiError,
@@ -83,6 +84,10 @@ export async function playAlbum(card: Pick<DeckCard, 'uri' | 'name'>, deps: Play
 }
 
 function playErrorMessage(err: unknown): string {
+  if (err instanceof QuotaExceededError) {
+    const at = new Date(err.blockedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `Spotify's developer quota for ${err.group || 'playback'} is used up. Try again after ${at}.`;
+  }
   if (err instanceof SpotifyApiError) {
     if (err.status === 404) return `${NO_DEVICES_MESSAGE} (${err.message})`;
     if (err.status === 403) return `Spotify refused playback: ${err.message}. Premium is required.`;

@@ -9,8 +9,20 @@ const API_BASE = 'https://api.spotify.com/v1';
 
 /** Longest Retry-After we are willing to sleep through inside a request. Longer waits surface as errors. */
 const MAX_INLINE_WAIT_S = 30;
-/** Dev-mode quota is shared across all my apps and resets on an unknown schedule, so stop calling for a while. */
+/**
+ * Dev-mode quota is shared across all my apps and resets on an unknown schedule, so stop calling for a while.
+ * Spotify counts quota per bucket of endpoints, so the backoff only applies to the endpoint group that hit it:
+ * running out on artist albums must not block playback.
+ */
 const QUOTA_BACKOFF_MS = 15 * 60_000;
+
+/** Endpoint group used for quota backoff: "me/player", "me/albums", "artists", "search", "albums", … */
+export function quotaGroup(url: string): string {
+  const parts = new URL(url).pathname.replace(/^\/v1\//, '').split('/').filter(Boolean);
+  return parts[0] === 'me' && parts[1] ? `me/${parts[1]}` : (parts[0] ?? '');
+}
+
+export type QuotaBlocks = Record<string, number>;
 
 export class SpotifyApiError extends Error {
   override name = 'SpotifyApiError';
@@ -34,8 +46,11 @@ export class RateLimitError extends SpotifyApiError {
 /** 429 with `reason: "QUOTA_EXCEEDED"`: the dev-mode quota is used up, not a short rate limit. */
 export class QuotaExceededError extends SpotifyApiError {
   override name = 'QuotaExceededError';
-  constructor(readonly blockedUntil: number) {
-    super(429, 'Spotify dev-mode quota exceeded. Backing off.', 'QUOTA_EXCEEDED');
+  constructor(
+    readonly blockedUntil: number,
+    readonly group = '',
+  ) {
+    super(429, `Spotify dev-mode quota exceeded${group ? ` for ${group}` : ''}. Backing off.`, 'QUOTA_EXCEEDED');
   }
 }
 
@@ -55,7 +70,7 @@ export interface ClientDeps {
   now?: () => number;
   maxRetries?: number;
   /** Persists the quota backoff so a page reload doesn't start hammering the API again. */
-  quotaStore?: { load(): Promise<number | undefined>; save(until: number): Promise<void> };
+  quotaStore?: { load(): Promise<QuotaBlocks | undefined>; save(blocks: QuotaBlocks): Promise<void> };
 }
 
 interface ErrorBody {
@@ -68,7 +83,7 @@ export function createSpotifyClient(deps: ClientDeps) {
   const now = deps.now ?? Date.now;
   const maxRetries = deps.maxRetries ?? 3;
 
-  let quotaBlockedUntil = 0;
+  let quotaBlocks: QuotaBlocks = {};
   let quotaLoaded = !deps.quotaStore;
   const inflight = new Map<string, Promise<unknown>>();
 
@@ -84,10 +99,12 @@ export function createSpotifyClient(deps: ClientDeps) {
     let forcedRefresh = false;
     for (let attempt = 0; ; attempt++) {
       if (!quotaLoaded) {
-        quotaBlockedUntil = Math.max(quotaBlockedUntil, (await deps.quotaStore!.load()) ?? 0);
+        quotaBlocks = { ...((await deps.quotaStore!.load()) ?? {}), ...quotaBlocks };
         quotaLoaded = true;
       }
-      if (now() < quotaBlockedUntil) throw new QuotaExceededError(quotaBlockedUntil);
+      const group = quotaGroup(url);
+      const blockedUntil = quotaBlocks[group] ?? 0;
+      if (now() < blockedUntil) throw new QuotaExceededError(blockedUntil, group);
 
       const token = await deps.getToken(false);
       const res = await doFetch(url, {
@@ -116,9 +133,12 @@ export function createSpotifyClient(deps: ClientDeps) {
 
       if (res.status === 429) {
         if (body.error?.reason === 'QUOTA_EXCEEDED') {
-          quotaBlockedUntil = now() + QUOTA_BACKOFF_MS;
-          await deps.quotaStore?.save(quotaBlockedUntil);
-          throw new QuotaExceededError(quotaBlockedUntil);
+          const until = now() + QUOTA_BACKOFF_MS;
+          // Drop expired entries while we're at it.
+          quotaBlocks = Object.fromEntries(Object.entries(quotaBlocks).filter(([, t]) => t > now()));
+          quotaBlocks[group] = until;
+          await deps.quotaStore?.save(quotaBlocks);
+          throw new QuotaExceededError(until, group);
         }
         // Retry-After is "normally" present; fall back to exponential backoff.
         const header = Number(res.headers.get('Retry-After'));
@@ -168,19 +188,19 @@ export function createSpotifyClient(deps: ClientDeps) {
       request<T>(path, { method: 'POST', body, query }),
     del: <T = void>(path: string, body?: unknown, query?: RequestOptions['query']) =>
       request<T>(path, { method: 'DELETE', body, query }),
-    /** Epoch ms until which calls fail fast after a QUOTA_EXCEEDED, or 0. */
-    quotaBlockedUntil: () => quotaBlockedUntil,
+    /** Latest epoch ms until which some endpoint group fails fast after a QUOTA_EXCEEDED, or 0. */
+    quotaBlockedUntil: () => Math.max(0, ...Object.values(quotaBlocks)),
   };
 }
 
 export type SpotifyClient = ReturnType<typeof createSpotifyClient>;
 
-const QUOTA_KEY = 'spotify.quotaBlockedUntil';
+const QUOTA_KEY = 'spotify.quotaBlocks';
 
 export const spotify = createSpotifyClient({
   getToken: getAccessToken,
   cache: idbCache,
-  quotaStore: { load: () => kvGet<number>(QUOTA_KEY), save: (until) => kvSet(QUOTA_KEY, until) },
+  quotaStore: { load: () => kvGet<QuotaBlocks>(QUOTA_KEY), save: (blocks) => kvSet(QUOTA_KEY, blocks) },
 });
 
 // --- Endpoints ---------------------------------------------------------------

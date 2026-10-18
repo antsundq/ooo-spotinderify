@@ -103,7 +103,7 @@ export async function wildcardPool({
 
   const perTag = Math.ceil(count / Math.max(1, chosen.length));
   const seen = new Set<string>();
-  const results = await mapLimit(chosen, 2, async (tag) => {
+  const results = await mapLimit(chosen, 1, async (tag) => {
     const page = 1 + Math.floor(rng() * 3);
     const albums = shuffle((await tryOrSkip(() => lfm.tagTopAlbums(tag, page, 50), isFatal)) ?? [], rng);
     const out: AlbumCandidate[] = [];

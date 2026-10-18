@@ -82,13 +82,14 @@ export async function adjacentPool({
     remaining.splice(remaining.indexOf(pick), 1);
   }
 
-  const perArtist = await mapLimit(picks, 3, (pick) =>
+  // Two at a time: each pick costs up to two Spotify calls and the dev-mode quota is small.
+  const perArtist = await mapLimit(picks, 2, (pick) =>
     tryOrSkip(async () => {
       // Genre check first: it only costs a (cached) Last.fm call, not Spotify quota.
       if (await artistHasExcludedGenre(lfm, pick.name, exclusions)) return [];
       const artist = await resolveArtist(pick.name, client);
       if (!artist) return [];
-      const albums = dedupeAlbums((await getArtistAlbums(artist.id, 20, client)).filter(isProperAlbum)).filter(
+      const albums = dedupeAlbums((await getArtistAlbums(artist.id, 10, client)).filter(isProperAlbum)).filter(
         (a) => !library.has(a),
       );
       return shuffle(albums, rng)
