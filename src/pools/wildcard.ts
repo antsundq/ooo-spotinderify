@@ -53,16 +53,22 @@ export function pickTags(
   rng: Rng,
   exclusions: Exclusions = { artists: [], genres: [] },
 ): string[] {
-  const mineTop = mine.filter((t) => !isExcludedTag(t.tag, exclusions)).slice(0, 15);
+  // Sample without replacement, so n distinct tags come back whenever that many exist.
+  const mineLeft = mine.filter((t) => !isExcludedTag(t.tag, exclusions)).slice(0, 15);
   const myTagSet = new Set(mine.map((t) => t.tag));
-  const untouched = EXPLORE_TAGS.filter((t) => !myTagSet.has(t) && !isExcludedTag(t, exclusions));
-  const picked = new Set<string>();
-  for (let i = 0; picked.size < n && i < n * 5; i++) {
-    const explore = !mineTop.length || rng() < exploreChance;
-    const tag = explore ? untouched[Math.floor(rng() * untouched.length)] : weightedPick(mineTop, (t) => t.weight, rng)?.tag;
-    if (tag) picked.add(tag);
+  const untouchedLeft = EXPLORE_TAGS.filter((t) => !myTagSet.has(t) && !isExcludedTag(t, exclusions));
+  const picked: string[] = [];
+  while (picked.length < n && (mineLeft.length || untouchedLeft.length)) {
+    const explore = !mineLeft.length || (untouchedLeft.length > 0 && rng() < exploreChance);
+    if (explore) {
+      picked.push(...untouchedLeft.splice(Math.floor(rng() * untouchedLeft.length), 1));
+    } else {
+      const pick = weightedPick(mineLeft, (t) => t.weight, rng)!;
+      mineLeft.splice(mineLeft.indexOf(pick), 1);
+      picked.push(pick.tag);
+    }
   }
-  return [...picked];
+  return picked;
 }
 
 export interface WildcardOptions {

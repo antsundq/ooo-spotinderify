@@ -60,8 +60,17 @@ describe('pickTags', () => {
   ];
 
   it('picks only my tags when exploreChance is 0', () => {
-    const picked = pickTags(mine, 2, 0, Math.random);
-    expect(picked.sort()).toEqual(['indie', 'jazz']);
+    // Run many times: this used to fail ~2% of the time when it drew with replacement.
+    for (let i = 0; i < 500; i++) {
+      expect(pickTags(mine, 2, 0, Math.random).sort()).toEqual(['indie', 'jazz']);
+    }
+  });
+
+  it('returns distinct tags and stops when it runs out', () => {
+    const picked = pickTags(mine, 5, 0, Math.random);
+    expect(new Set(picked).size).toBe(picked.length);
+    expect(picked.slice(0, 2).sort()).toEqual(['indie', 'jazz']);
+    expect(picked).toHaveLength(5);
   });
 
   it('explores only tags I have never touched when exploreChance is 1', () => {
