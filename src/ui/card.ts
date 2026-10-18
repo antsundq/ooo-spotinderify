@@ -34,6 +34,7 @@ export function createCardElement(card: DeckCard): HTMLElement {
         <span class="stamp stamp-right">Play</span>
         <span class="stamp stamp-left">Skip</span>
         <span class="stamp stamp-up">Save</span>
+        <span class="stamp stamp-down">Later</span>
         <div class="meta">
           <span class="source">${escapeHtml(sourceLabel(card.source))}</span>
           <h2>${escapeHtml(card.name)}</h2>

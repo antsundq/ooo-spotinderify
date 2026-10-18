@@ -176,6 +176,17 @@ describe('Deck', () => {
     expect(builders.adjacent.mock.calls.length + builders.favorites.mock.calls.length).toBeGreaterThan(2);
   });
 
+  it('"not now" removes the card without learning anything', async () => {
+    const state = emptySwipeState();
+    const { deck } = makeDeck({ state });
+    await deck.start();
+    const top = deck.cards[0]!;
+    deck.swiped(swipe(top, 'down'));
+    expect(deck.cards.map((c) => c.uri)).not.toContain(top.uri);
+    expect(state.artistWeights.has(top.artistId)).toBe(false);
+    expect(state.lastSwipe.get(top.uri)?.dir).toBe('down');
+  });
+
   it('restores a card on undo', async () => {
     const { deck } = makeDeck({});
     await deck.start();

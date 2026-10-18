@@ -27,8 +27,10 @@ describe('decideSwipe', () => {
     expect(decideSwipe(10, 0, 2, 0, W, H)).toBeUndefined();
   });
 
-  it('does not swipe down', () => {
-    expect(decideSwipe(0, H * 0.6, 0, 2, W, H)).toBeUndefined();
+  it('swipes down for "not now" on distance or flick', () => {
+    expect(decideSwipe(5, H * 0.35, 0, 0, W, H)).toBe('down');
+    expect(decideSwipe(0, 40, 0, 0.9, W, H)).toBe('down');
+    expect(decideSwipe(0, H * 0.2, 0, 0.1, W, H)).toBeUndefined();
   });
 
   it('uses the dominant axis', () => {

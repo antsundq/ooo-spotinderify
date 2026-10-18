@@ -16,7 +16,9 @@ export function emptySwipeState(): SwipeState {
 /** Applies a swipe to the in-memory state. Mirrors what `recordSwipe` persists. */
 export function applySwipe(state: SwipeState, swipe: Swipe): void {
   state.lastSwipe.set(swipe.uri, { dir: swipe.dir, at: swipe.at });
-  state.artistWeights.set(swipe.artistId, addToWeight(state.artistWeights.get(swipe.artistId), SWIPE_DELTA[swipe.dir], swipe.at));
+  const delta = SWIPE_DELTA[swipe.dir];
+  // "Not now" teaches nothing, so it leaves the artist weight untouched.
+  if (delta) state.artistWeights.set(swipe.artistId, addToWeight(state.artistWeights.get(swipe.artistId), delta, swipe.at));
 }
 
 export async function loadSwipeState(): Promise<SwipeState> {
@@ -54,7 +56,8 @@ export async function recordSwipe(swipe: Swipe): Promise<number> {
   const { id: _ignored, ...entry } = swipe;
   const id = await tx.objectStore('swipes').add(entry);
   const artists = tx.objectStore('artists');
-  await artists.put(addToWeight(await artists.get(swipe.artistId), SWIPE_DELTA[swipe.dir], swipe.at), swipe.artistId);
+  const delta = SWIPE_DELTA[swipe.dir];
+  if (delta) await artists.put(addToWeight(await artists.get(swipe.artistId), delta, swipe.at), swipe.artistId);
   if (swipe.dir === 'right') await tx.objectStore('plays').put(swipe.at, swipe.uri);
   await tx.done;
   return id;
@@ -67,7 +70,8 @@ export async function undoSwipe(id: number, now = Date.now()): Promise<Swipe | u
   if (!swipe) return undefined;
   await tx.objectStore('swipes').delete(id);
   const artists = tx.objectStore('artists');
-  await artists.put(removeFromWeight(await artists.get(swipe.artistId), SWIPE_DELTA[swipe.dir], swipe.at, now), swipe.artistId);
+  const delta = SWIPE_DELTA[swipe.dir];
+  if (delta) await artists.put(removeFromWeight(await artists.get(swipe.artistId), delta, swipe.at, now), swipe.artistId);
   await tx.done;
   return swipe;
 }

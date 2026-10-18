@@ -29,9 +29,10 @@ export function poolWeights(slider: number): PoolWeights {
 
 // --- Swipes and artist weights -------------------------------------------------
 
-export type SwipeDir = 'left' | 'right' | 'up';
+/** right = play, up = save, left = skip (and learn), down = not now (no learning). */
+export type SwipeDir = 'left' | 'right' | 'up' | 'down';
 
-export const SWIPE_DELTA: Record<SwipeDir, number> = { right: 1, up: 1, left: -1 };
+export const SWIPE_DELTA: Record<SwipeDir, number> = { right: 1, up: 1, left: -1, down: 0 };
 
 const DAY = 24 * 60 * 60_000;
 
@@ -44,6 +45,8 @@ export const SCORING = {
   leftHideMs: 90 * DAY,
   /** A right- or up-swiped album is hidden this long, so it does not bounce straight back. */
   otherHideMs: 14 * DAY,
+  /** A "not now" (down) album comes back after this long, so it doesn't return in the same sitting. */
+  laterHideMs: 2 * DAY,
 };
 
 /** Weight stored per artist: `value` as of `updatedAt`. Decays exponentially from there. */
@@ -86,7 +89,8 @@ export interface LastSwipe {
 
 export function isHiddenBySwipe(last: LastSwipe | undefined, now: number): boolean {
   if (!last) return false;
-  const hide = last.dir === 'left' ? SCORING.leftHideMs : SCORING.otherHideMs;
+  const hide =
+    last.dir === 'left' ? SCORING.leftHideMs : last.dir === 'down' ? SCORING.laterHideMs : SCORING.otherHideMs;
   return now - last.at < hide;
 }
 

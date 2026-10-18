@@ -15,6 +15,7 @@ const ICONS = {
   undo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>',
   menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
   skip: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  later: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
   save: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M8 5.5v13l10.5-6.5z"/></svg>',
 };
@@ -56,6 +57,7 @@ export async function mountDeckScreen(root: HTMLElement, opts: ScreenOptions): P
       <div class="nowplaying" data-now hidden></div>
       <footer class="actions">
         <button class="round skip" data-act="left" aria-label="Skip">${ICONS.skip}</button>
+        <button class="round later" data-act="down" aria-label="Not now">${ICONS.later}</button>
         <button class="round save" data-act="up" aria-label="Save to library">${ICONS.save}</button>
         <button class="round play" data-act="right" aria-label="Play album">${ICONS.play}</button>
       </footer>
@@ -242,7 +244,7 @@ export async function mountDeckScreen(root: HTMLElement, opts: ScreenOptions): P
     if (sheet.open || document.querySelector('dialog[open]') || target.closest('input')) return;
     // Let Enter/Space activate a focused button or link instead of flipping.
     if ((e.key === ' ' || e.key === 'Enter') && target.closest('button, a')) return;
-    const keyDir: Record<string, SwipeDir> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up' };
+    const keyDir: Record<string, SwipeDir> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
     if (keyDir[e.key]) {
       e.preventDefault();
       act(keyDir[e.key]!);
@@ -260,7 +262,7 @@ export async function mountDeckScreen(root: HTMLElement, opts: ScreenOptions): P
 
 /** Starts a restored card off-screen on the side it left, then lets it slide back in. */
 function flyIn(el: HTMLElement, from: SwipeDir): void {
-  const offset = { left: 'translate3d(-120vw, 0, 0) rotate(-24deg)', right: 'translate3d(120vw, 0, 0) rotate(24deg)', up: 'translate3d(0, -120vh, 0)' };
+  const offset = { left: 'translate3d(-120vw, 0, 0) rotate(-24deg)', right: 'translate3d(120vw, 0, 0) rotate(24deg)', up: 'translate3d(0, -120vh, 0)', down: 'translate3d(0, 120vh, 0)' };
   el.style.transition = 'none';
   el.style.transform = offset[from];
   requestAnimationFrame(() =>

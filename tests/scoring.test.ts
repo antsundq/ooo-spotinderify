@@ -98,6 +98,13 @@ describe('anti-repeat', () => {
     expect(SCORING.otherHideMs).toBeLessThan(SCORING.leftHideMs);
   });
 
+  it('brings a "not now" album back after a couple of days', () => {
+    const later = { dir: 'down' as const, at: NOW };
+    expect(isHiddenBySwipe(later, NOW + DAY)).toBe(true);
+    expect(isHiddenBySwipe(later, NOW + SCORING.laterHideMs + 60_000)).toBe(false);
+    expect(SCORING.laterHideMs).toBeLessThan(SCORING.otherHideMs);
+  });
+
   it('never hides unswiped albums', () => {
     expect(isHiddenBySwipe(undefined, NOW)).toBe(false);
   });

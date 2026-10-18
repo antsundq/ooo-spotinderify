@@ -473,6 +473,14 @@ svg .fill {
   opacity: var(--stamp-up, 0);
 }
 
+.stamp-down {
+  left: 50%;
+  top: 20%;
+  color: #f5b942;
+  transform: translateX(-50%);
+  opacity: var(--stamp-down, 0);
+}
+
 .back {
   transform: rotateY(180deg);
   padding: 18px 16px;
@@ -521,7 +529,7 @@ svg .fill {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 24px;
+  gap: 18px;
   padding: 12px 16px 16px;
 }
 
@@ -550,10 +558,15 @@ svg .fill {
   color: #ff5a5f;
 }
 
-.round.save {
+.round.save,
+.round.later {
   width: 52px;
   height: 52px;
   color: #4aa8ff;
+}
+
+.round.later {
+  color: #f5b942;
 }
 
 .round.play {

@@ -50,6 +50,8 @@ export function decideSwipe(
     if (dx < -width * DISTANCE_COMMIT || (vx < -VELOCITY_COMMIT && dx < -MIN_FLICK_PX)) return 'left';
   } else if (dy < -height * DISTANCE_COMMIT || (vy < -VELOCITY_COMMIT && dy < -MIN_FLICK_PX)) {
     return 'up';
+  } else if (dy > height * DISTANCE_COMMIT || (vy > VELOCITY_COMMIT && dy > MIN_FLICK_PX)) {
+    return 'down';
   }
   return undefined;
 }
@@ -61,6 +63,7 @@ function setStamps(el: HTMLElement, dx: number, dy: number, width: number, heigh
   el.style.setProperty('--stamp-right', horizontal ? String(Math.min(1, Math.max(0, dx / w))) : '0');
   el.style.setProperty('--stamp-left', horizontal ? String(Math.min(1, Math.max(0, -dx / w))) : '0');
   el.style.setProperty('--stamp-up', horizontal ? '0' : String(Math.min(1, Math.max(0, -dy / h))));
+  el.style.setProperty('--stamp-down', horizontal ? '0' : String(Math.min(1, Math.max(0, dy / h))));
 }
 
 export function attachSwipe(el: HTMLElement, handlers: SwipeHandlers): SwipeController {
@@ -88,9 +91,10 @@ export function attachSwipe(el: HTMLElement, handlers: SwipeHandlers): SwipeCont
     const h = window.innerHeight;
     // Keep some of the release motion so the throw follows the finger.
     const tx = dir === 'right' ? w + width : dir === 'left' ? -(w + width) : dx + vx * 150;
-    const ty = dir === 'up' ? -(h + height) : dy + vy * 150;
-    const rot = dir === 'up' ? dx * ROTATE_DEG_PER_PX : (dir === 'right' ? 1 : -1) * 24;
-    setStamps(el, dir === 'right' ? 1e6 : dir === 'left' ? -1e6 : 0, dir === 'up' ? -1e6 : 0, 1, 1);
+    const vertical = dir === 'up' || dir === 'down';
+    const ty = dir === 'up' ? -(h + height) : dir === 'down' ? h + height : dy + vy * 150;
+    const rot = vertical ? dx * ROTATE_DEG_PER_PX : (dir === 'right' ? 1 : -1) * 24;
+    setStamps(el, dir === 'right' ? 1e6 : dir === 'left' ? -1e6 : 0, dir === 'up' ? -1e6 : dir === 'down' ? 1e6 : 0, 1, 1);
     el.style.transition = `transform ${FLING_MS}ms cubic-bezier(.3,.6,.4,1)`;
     el.style.transform = `translate3d(${tx}px, ${ty}px, 0) rotate(${rot}deg)`;
     return new Promise((resolve) => setTimeout(resolve, FLING_MS));

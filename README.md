@@ -5,6 +5,7 @@ A personal "Tinder for albums" on top of Spotify. Swipe through album cards:
 - **Right** plays the whole album, in order, on your active Spotify device
 - **Left** skips it and teaches the app
 - **Up** saves it to your library without playing
+- **Down** means "not now": the album comes back in a couple of days, and nothing is learned
 - **Tap** flips the card to show the tracklist and runtime
 
 A slider sets the mix from **old favorites** (your saved albums you haven't heard in a while) to **new discoveries** (artists similar to your favorites and top albums for your genres, via Last.fm).
@@ -116,7 +117,7 @@ src/
 ```
 
 - **Learning.** A right or up swipe adds +1 to the artist's weight and a left swipe −1. Weights halve every 30 days. Artists below −1.5 are suppressed, and liked artists come up more often.
-- **Anti-repeat.** A left-swiped album stays hidden for 90 days, and a played or saved one for 14 days. The deck never shows more than 2 cards in a row from the same artist.
+- **Anti-repeat.** A left-swiped album stays hidden for 90 days, a played or saved one for 14 days, and a "not now" one for 2 days. "Not now" doesn't change any artist weight. The deck never shows more than 2 cards in a row from the same artist.
 - **Children's music.** Spotify no longer returns genres, and Last.fm often has no tags for kids' artists. The app detects them from kids-named similar artists (Swedish and English) and blocklists the whole cluster.
 - **Settings** (⋯ → Settings) has slider presets, excluded artists and genres, reset learned weights, and clear cache.
 - **Debug page** (⋯ → Debug) shows the deck, the pool mix, raw pools and token status.
