@@ -212,6 +212,8 @@ pre {
 
 /* --- Swipe screen ------------------------------------------------------ */
 
+/* Safari only honours this on the root element; it stops pull-to-refresh and rubber-banding. */
+html,
 body {
   overscroll-behavior: none;
 }

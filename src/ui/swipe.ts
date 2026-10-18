@@ -147,7 +147,12 @@ export function attachSwipe(el: HTMLElement, handlers: SwipeHandlers): SwipeCont
       handlers.onTap();
       return;
     }
-    const dir = e.type === 'pointerup' ? decideSwipe(dx, dy, vx, vy, width, height) : undefined;
+    // If the system cancels the pointer (iOS can, mid-drag), still honour a drag that already went far
+    // enough; only the velocity of a cancelled gesture is unreliable.
+    const dir =
+      e.type === 'pointerup'
+        ? decideSwipe(dx, dy, vx, vy, width, height)
+        : decideSwipe(dx, dy, 0, 0, width, height);
     if (dir) {
       void fling(dir, vx, vy);
       handlers.onSwipe(dir);
@@ -158,10 +163,20 @@ export function attachSwipe(el: HTMLElement, handlers: SwipeHandlers): SwipeCont
     }
   };
 
+  // iOS can still claim a downward drag for pull-to-refresh or page rubber-banding despite
+  // `touch-action: none`, which cancels the pointer mid-swipe. Cancelling the native touchmove
+  // keeps the gesture ours. The flipped card's back face scrolls natively, so leave it alone.
+  const onTouchMove = (e: TouchEvent) => {
+    if (pointerId === undefined) return;
+    if (el.classList.contains('flipped') && (e.target as Element | null)?.closest('.back')) return;
+    if (e.cancelable) e.preventDefault();
+  };
+
   el.addEventListener('pointerdown', onDown);
   el.addEventListener('pointermove', onMove);
   el.addEventListener('pointerup', onUp);
   el.addEventListener('pointercancel', onUp);
+  el.addEventListener('touchmove', onTouchMove, { passive: false });
 
   return {
     fling: (dir) => {
@@ -174,6 +189,7 @@ export function attachSwipe(el: HTMLElement, handlers: SwipeHandlers): SwipeCont
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointercancel', onUp);
+      el.removeEventListener('touchmove', onTouchMove);
     },
   };
 }
