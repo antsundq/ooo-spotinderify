@@ -11,6 +11,16 @@ A slider sets the mix from **old favorites** (your saved albums you haven't hear
 
 It's a browser-only PWA (Vite + TypeScript, no backend). Spotify login uses Authorization Code with PKCE, and everything the app learns lives in IndexedDB on the device.
 
+## What is this, and can I use it?
+
+This is a **hobby project I built for myself**. It's public so others can read the code or run their own copy, but it isn't a product or a service.
+
+- **The deployed site won't work for you.** It runs in Spotify's Development Mode, so only Spotify accounts I've allow-listed can log in. Anyone else is rejected at the Spotify login.
+- **To use it yourself, run your own copy.** Fork the repo, create your own (free) Spotify developer app and Last.fm API key, and follow [Setup](#setup) and [Deploy](#deploy). Spotify Premium is required.
+- **No data leaves your browser** except calls to Spotify and Last.fm. There is no server, account system, analytics or tracking. Your swipe history and learned preferences live in your browser's IndexedDB.
+- **Not affiliated with Spotify or Last.fm.** It uses their public APIs under their developer terms.
+- **No support or roadmap.** Issues and pull requests may go unanswered, and the code may change or break as the Spotify API changes.
+
 ## Setup
 
 1. **Spotify app.** At <https://developer.spotify.com/dashboard>, click **Create app**:
